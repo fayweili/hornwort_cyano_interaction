@@ -4,6 +4,7 @@
 * [bam2fastq](https://gsl.hudsonalpha.org/information/software/bam2fastq)
 * [assign_sample.py](https://github.com/fayweili/hornwort_cyano_interaction/blob/master/scripts/assign_sample.py)
 * [dada2](https://benjjneb.github.io/dada2/index.html)
+* [phyloseq](https://joey711.github.io/phyloseq/)
 
 # Processing PacBio CCS reads
 **Make CCS reads from PacBio subread bam file, requiring 5 minimum passes and expected accuracy of >0.999**

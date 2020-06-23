@@ -10,7 +10,7 @@
 ```bash
 ccs --report-file ccs_report_p5_rq0.999.txt --minLength=100 --maxLength=2000 --num-threads=12 --min-passes=5 --min-rq=0.999 m54089_180212_172613.subreads.bam pilot_run_ccs_p5_rq0.999.bam 
 ```
-**Demultiplex the big bam file into separate bam files (each bam file now corresponds to a sample)**
+**Demultiplex the big bam file into separate bam files (each bam file now corresponds to a unique sample)**
 ```bash
 mkdir split_bams
 cd split_bams
@@ -32,4 +32,30 @@ BCF7	BCR1	P1_1_1_Phaeoceros
 BCF8	BCR1	P1_1_5_Anthoceros
 ```
 * also note that you might need to edit `assign_sample.py` so that it can find the correct bam files in your situation
+**Remove primer sequences and filter by quality and length using dada2**
+```R
+## Loading libraries ##
+library(phyloseq)
+library(dada2)
+library(ggplot2)
+library(Biostrings)
 
+## Reading files ##
+path <- "/Users/fay-weili/Desktop/Hornwort_amplicon/dada2/sample_fastq" # CHANGE ME to location of the fastq file
+fns <- list.files(path, pattern="fastq.gz", full.names=TRUE)
+sample.names <- sapply(strsplit(basename(fns), ".fastq.gz"), '[', 1) # get sample names from fastq file names
+cw <- "CGTAGCTTCCGGTGGTATCCACGT" # primer 1
+cx <- "GGGGCAGGTAAGAAAGGGTTTCGTA" # primer 2
+rc <- dada2:::rc 
+
+## Remove primers ##
+nop <- file.path(paste(path,'_deprimers', sep=''), basename(fns))
+prim <- removePrimers(fns, nop, primer.fwd=cw, primer.rev=dada2:::rc(cx), orient=TRUE, verbose=TRUE)
+lens.fn <- lapply(nop, function(fn) nchar(getSequences(fn))) # plot len distribution
+lens <- do.call(c, lens.fn)
+hist(lens, 100)
+
+## Filter ##
+filt <- file.path(paste(path,'_deprimers_lenfiltered', sep=''), basename(fns))
+track <- filterAndTrim(nop, filt, minQ=3, minLen=400, maxLen=1200, maxN=0, rm.phix=FALSE, maxEE=2, verbose=TRUE)
+```

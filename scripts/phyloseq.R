@@ -17,6 +17,7 @@ library(picante)
 library(UpSetR)
 library(cowplot)
 
+# Use these when plotting the trees #
 library(ggtree)
 library(treeio)
 library(naniar)
@@ -109,11 +110,21 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
     time_series_physeq_plant_filtered <- transform_sample_counts(time_series_physeq_plant, fun = filter3perc_count)  
     time_series_physeq_soil <- subset_samples(time_series_physeq, Type=="soil")
     time_series_physeq_filtered <- merge_phyloseq(time_series_physeq_plant_filtered, time_series_physeq_soil)
+    time_series_physeq_filtered_tranformed <- transform_sample_counts(time_series_physeq_filtered, function(x) x/sum(x))
+    
+    time_series_physeq_plant_filtered_transformed <- transform_sample_counts(time_series_physeq_plant_filtered, function(x) x/sum(x))  
+    time_series_physeq_filtered_all <- transform_sample_counts(time_series_physeq, fun = filter3perc_count)  
+    time_series_physeq_filtered_all_transformed <- transform_sample_counts(time_series_physeq_filtered_all, function(x) x/sum(x))  
+    #write.table(otu_table(time_series_physeq_plant_filtered_transformed), quote=F, file="time_series_physeq_plant_filtered_transformed.txt", sep="\t")
+    #write.table(otu_table(time_series_physeq_filtered_all_transformed), quote=F, file="time_series_physeq_filtered_all_transformed.txt", sep="\t")
   ## UpsetR
     p_upset_quadrat <- upset(phyloseq2upsetr(time_series_physeq_filtered, "Quadrat"),order.by = "freq")
     P_upset_potato_type <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Potato1"|Quadrat=="Potato2"|Quadrat=="Potato3"), "Type"),order.by = "freq")
     P_upset_grossman_type <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Grossman1"|Quadrat=="Grossman2"), "Type"),order.by = "freq")
+    upset_df <- phyloseq2upsetr(time_series_physeq_filtered, "Type")
+    write.table(upset_df, "ASV_by_type.txt", quote=F, sep="\t")
     ### plots
+    library(grid)
     p_upset_quadrat 
     grid.edit('arrange',name='arrange2')
     vp1 = grid.grab()
@@ -126,11 +137,44 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
     svg("upset_plot.svg", width = 9, height = 5)
     plot_grid(vp1,vp2, ncol = 2, labels = c('A', 'B'))
     dev.off()
+    
+    ### Time points
+    P_upset_potato_Q1_all_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Potato1"), "Time"),order.by = "freq")
+    P_upset_potato_Q1_plant_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_plant_filtered, Quadrat=="Potato1"), "Time"),order.by = "freq")
+    P_upset_potato_Q1_soil_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_soil, Quadrat=="Potato1"), "Time"),order.by = "freq")
+    P_upset_potato_Q2_all_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Potato2"), "Time"),order.by = "freq")
+    P_upset_potato_Q3_all_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Potato3"), "Time"),order.by = "freq")
+    P_upset_grossman_Q1_all_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Grossman1"), "Time"),order.by = "freq")
+    P_upset_grossman_Q2_all_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Grossman2"), "Time"),order.by = "freq")
+    
+    P_upset_grossman_Q1_all_time 
+    grid.edit('arrange',name='arrange2')
+    vp1 = grid.grab()
+    P_upset_grossman_Q2_all_time 
+    grid.edit('arrange',name='arrange2')
+    vp2 = grid.grab()
+    svg("upset_plot_GrossmanQ_by_time.svg", width = 9, height = 5)
+    plot_grid(vp1,vp2, ncol = 2, labels = c('GrossmanQ1', 'GrossmanQ2'))
+    dev.off()
+ 
+    P_upset_potato_Q1_all_time 
+    grid.edit('arrange',name='arrange2')
+    vp12 = grid.grab()
+    P_upset_potato_Q2_all_time 
+    grid.edit('arrange',name='arrange2')
+    vp22 = grid.grab()
+    P_upset_potato_Q3_all_time 
+    grid.edit('arrange',name='arrange2')
+    vp32 = grid.grab()
+    svg("upset_plot_PotatoQ_by_time_.svg", width = 9, height = 9)
+    plot_grid(vp12,vp22,vp32,vp1,vp2, ncol = 3)
+    dev.off()   
+    
   ## PCoA of everything
     ### Color by Type
-      time_series_physeq_transformed.ord <- ordinate(time_series_physeq_transformed, "PCoA", "bray")
-      time_series_pcoa_all <- plot_ordination(time_series_physeq_transformed, time_series_physeq_transformed.ord, type="samples", color="Quadrat") 
-      time_series_pcoa_all_DF <- plot_ordination(time_series_physeq_transformed, time_series_physeq_transformed.ord, type="samples", color="Quadrat", justDF=TRUE) 
+      time_series_physeq_transformed.ord <- ordinate(time_series_physeq_filtered_tranformed, "PCoA", "bray")
+      time_series_pcoa_all <- plot_ordination(time_series_physeq_filtered_tranformed, time_series_physeq_transformed.ord, type="samples", color="Quadrat") 
+      time_series_pcoa_all_DF <- plot_ordination(time_series_physeq_filtered_tranformed, time_series_physeq_transformed.ord, type="samples", color="Quadrat", justDF=TRUE) 
       time_series_pcoa_all_soil <- ggplot(data = subset(time_series_pcoa_all_DF, Type=='soil'), mapping = aes(x = Axis.1, y = Axis.2)) +
         geom_point(size=1.8, shape=17, aes(color=Quadrat)) + geom_point(shape = 2,size = 1.8,colour = "black") + scale_color_manual(values=c("lightcoral","#7570B3","steelblue","gold2","darkseagreen")) +
         coord_fixed() + xlim(-0.52, 0.52)+ ylim(-0.4, 0.5) + ggtitle("Soil samples")
@@ -140,6 +184,19 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
       time_series_pcoa_all_soil + time_series_pcoa_all_plant + plot_layout(guides = 'collect')
       ggsave("potato_grossman_pcoa_plants_soils_allinone.pdf", device = "pdf", width = 10, height = 5)
       ggsave("potato_grossman_pcoa_plants_soils_allinone.svg", device = "svg", width = 10, height = 5)
+      #### unifrac
+      time_series_physeq_transformed.ord <- ordinate(time_series_physeq_filtered_tranformed, "PCoA", "wunifrac")
+      time_series_pcoa_all <- plot_ordination(time_series_physeq_filtered_tranformed, time_series_physeq_transformed.ord, type="samples", color="Quadrat") 
+      time_series_pcoa_all_DF <- plot_ordination(time_series_physeq_filtered_tranformed, time_series_physeq_transformed.ord, type="samples", color="Quadrat", justDF=TRUE) 
+      time_series_pcoa_all_soil <- ggplot(data = subset(time_series_pcoa_all_DF, Type=='soil'), mapping = aes(x = Axis.1, y = Axis.2)) +
+        geom_point(size=1.8, shape=17, aes(color=Quadrat)) + geom_point(shape = 2,size = 1.8,colour = "black") + scale_color_manual(values=c("lightcoral","#7570B3","steelblue","gold2","darkseagreen")) +
+        coord_fixed() + xlim(-0.13, 0.175)+ ylim(-0.125, 0.08) + ggtitle("Soil samples")
+      time_series_pcoa_all_plant <- ggplot(data = subset(time_series_pcoa_all_DF, Type!='soil'), mapping = aes(x = Axis.1, y = Axis.2)) +
+        geom_point(size=1.8, aes(color=Quadrat)) + geom_point(shape = 1,size = 1.8,colour = "black") + scale_color_manual(values=c("lightcoral","#7570B3","steelblue","gold2","darkseagreen")) +
+        coord_fixed()+ xlim(-0.13, 0.175)+ ylim(-0.125, 0.08) + ggtitle("Plant samples")
+      time_series_pcoa_all_soil + time_series_pcoa_all_plant + plot_layout(guides = 'collect')
+      ggsave("potato_grossman_pcoa_plants_soils_allinone_unifrac.pdf", device = "pdf", width = 10, height = 5)
+      ggsave("potato_grossman_pcoa_plants_soils_allinone_unifrac.svg", device = "svg", width = 10, height = 5)
     ### Color by Time
       time_series_physeq_transformed.ord <- ordinate(time_series_physeq_transformed, "PCoA", "bray")
       time_series_pcoa_all_DF <- plot_ordination(time_series_physeq_transformed, time_series_physeq_transformed.ord, type="samples", color="Time", justDF=TRUE) 
@@ -150,17 +207,54 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
         geom_point(size=1.8, aes(color=Time)) + geom_point(shape = 1,size = 1.8,colour = "black") + scale_color_brewer(palette="YlGnBu")+
         coord_fixed()+ xlim(-0.52, 0.52) + ylim(-0.4, 0.5) + ggtitle("Plant samples")
       time_series_pcoa_all_soil + time_series_pcoa_all_plant + plot_layout(guides = 'collect')
+      
+      time_series_bray_dist <- phyloseq::distance(time_series_physeq_transformed, method="bray")
+      pairwise_dist <- dist2list(time_series_bray_dist)
+      ggplot(pairwise_dist) + geom_histogram(aes(value))
   ## PERMANOVA 
-    time_series_bray_dist <- phyloseq::distance(time_series_physeq_transformed, method="bray")
-    simplified_type <- sample_data(time_series_physeq_transformed)$Type
-    levels(simplified_type)<-c(levels(simplified_type),"plant")
-    simplified_type[simplified_type=="Notothylas"]<-"plant"
-    simplified_type[simplified_type=="Anthoceros"]<-"plant"
-    simplified_type[simplified_type=="Phaeoceros"]<-"plant"
-    adonis(time_series_bray_dist ~ sample_data(time_series_physeq_transformed)$Quadrat+simplified_type, permutations = 10000)
-    adonis(time_series_bray_dist ~ sample_data(time_series_physeq_transformed)$Quadrat+sample_data(time_series_physeq_transformed)$Time+simplified_type, permutations = 10000)
-    adonis(time_series_bray_dist ~ sample_data(time_series_physeq_transformed)$Time, permutations = 10000)
-    ### test plot
+    ## All 
+      time_series_wunifrac_dist <- phyloseq::distance(time_series_physeq_transformed, method="wunifrac")
+      
+      simplified_type <- sample_data(time_series_physeq_transformed)$Type
+      levels(simplified_type)<-c(levels(simplified_type),"plant")
+      simplified_type[simplified_type=="Notothylas"]<-"plant"
+      simplified_type[simplified_type=="Anthoceros"]<-"plant"
+      simplified_type[simplified_type=="Phaeoceros"]<-"plant"
+      
+      site <- sample_data(time_series_physeq_transformed)$Quadrat
+      levels(site)<-c(levels(site),"Potato","Grossman")
+      site[site=="Potato1"]<-"Potato"
+      site[site=="Potato2"]<-"Potato"
+      site[site=="Potato3"]<-"Potato"
+      site[site=="Grossman1"]<-"Grossman"
+      site[site=="Grossman2"]<-"Grossman"
+      
+      adonis(time_series_wunifrac_dist ~ sample_data(time_series_physeq_transformed)$Quadrat+simplified_type, permutations = 10000)
+      adonis(time_series_wunifrac_dist ~ sample_data(time_series_physeq_transformed)$Quadrat+sample_data(time_series_physeq_transformed)$Time+simplified_type, permutations = 10000)
+      adonis(time_series_wunifrac_dist ~ sample_data(time_series_physeq_transformed)$Time, permutations = 10000)
+      adonis(time_series_wunifrac_dist ~ site, permutations = 10000)
+      adonis(time_series_wunifrac_dist ~ site + sample_data(time_series_physeq_transformed)$Quadrat + sample_data(time_series_physeq_transformed)$Time + simplified_type, permutations = 10000)
+      
+      beta <- betadisper(time_series_bray_dist, sample_data(time_series_physeq_transformed)$Type)
+      permutest(beta)
+    
+    ## Potato
+      potato_wunifrac_dist <- phyloseq::distance(potato_physeq_transformed, method="wunifrac")
+      simplified_type <- sample_data(potato_physeq_transformed)$Type
+      levels(simplified_type)<-c(levels(simplified_type),"plant")
+      simplified_type[simplified_type=="Notothylas"]<-"plant"
+      simplified_type[simplified_type=="Anthoceros"]<-"plant"
+      simplified_type[simplified_type=="Phaeoceros"]<-"plant"
+      adonis(potato_wunifrac_dist ~ sample_data(potato_physeq_transformed)$Quadrat+sample_data(potato_physeq_transformed)$Time+simplified_type, permutations = 10000)
+  
+    ## Grossman
+      grossman_wunifrac_dist <- phyloseq::distance(grossman_physeq_transformed, method="wunifrac")
+      simplified_type <- sample_data(grossman_physeq_transformed)$Type
+      levels(simplified_type)<-c(levels(simplified_type),"plant")
+      simplified_type[simplified_type=="Notothylas"]<-"plant"
+      adonis(grossman_wunifrac_dist ~ sample_data(grossman_physeq_transformed)$Quadrat+sample_data(grossman_physeq_transformed)$Time+simplified_type, permutations = 10000)
+      
+  ### test plot
     time_series_pcoa_all_Grossman_soil <- ggplot(data = subset(time_series_pcoa_all_DF, Type=='soil'&(Quadrat=='Grossman1'|Quadrat=='Grossman2')), mapping = aes(x = Axis.1, y = Axis.2)) +
       geom_point(size=3, shape=17, aes(color=Quadrat)) + geom_point(shape = 2,size = 3,colour = "black") + scale_color_manual(values=c("lightcoral","#7570B3","steelblue","gold2","darkseagreen")) +
       coord_fixed()+ xlim(-0.25, -0.05) + ylim(0, 0.26) + ggtitle("Soil samples")
@@ -327,7 +421,7 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
       ASV_count <- ASV_distribution_func(0.03)
       mu <- ddply(ASV_count, "Type", summarise, grp.mean=mean(ASV_count)) # calculate mean
       p_ASVdistr_3 <- ggplot(as.data.frame(subset(ASV_count,Type=='plant')), aes(x=ASV_count, fill=Type, color=Type)) + 
-        geom_histogram(binwidth=1, alpha=0.5) +
+        geom_histogram(binwidth=1, alpha=0.5) + scale_x_continuous(breaks=seq(1,10,by=2)) +
         xlab("Number of ASV") + ylab("Sample count") + ggtitle("Distribution of ASV") +
         scale_color_brewer(palette="Dark2") + scale_fill_brewer(palette="Dark2") +
         geom_vline(data=subset(mu,Type=='plant'), aes(xintercept=grp.mean, color=Type), linetype="dashed") 
@@ -351,12 +445,45 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
       p_readdistr + p_ASVdistr_0 + p_ASVdistr_3 + plot_layout(guides = 'collect')
       p_distr <- p_readdistr + p_ASVdistr_0 + p_ASVdistr_3 + plot_layout(guides = 'collect')
       ggsave("Read_ASV_distribution.pdf", device = "pdf", width = 18, height = 6)
-
+    
+    ### Read count vs ASV count
+      read_count_file <- read.table("/Users/fay-weili/Box/hornwort_amplicon/dada2/sample_fastq_deprimers_lenfiltered_JNP1-3/PG_read_number_distribution_wFilename")
+      read_count_file <- tibble::column_to_rownames(read_count_file, var="V1")
+      read_count_file$V2 <- read_count_file$V2 /4
+      read_count_ASV_count <- merge(read_count_file, ASV_count, by="row.names")
+      p_read_count_ASV_count <- ggplot(data=read_count_ASV_count, mapping=aes(V2,ASV_count)) + 
+        geom_point(aes(color=Type)) + geom_smooth(method = lm) + 
+        xlab("Read count") + ylab("Number of ASVs") 
+      ggsave("read_count_ASV_count.svg", device = "svg", width = 8, height = 4)
+      linearMod <- lm(ASV_count ~ V2, data=read_count_ASV_count)
+      summary(linearMod)
+      
 # Rarefraction curve ------------------------------------------------------------
   ggrare(time_series_physeq, color="Type", step=100, parallel=T) + 
       scale_fill_manual(values = cbp1) + scale_color_manual(values = cbp1) + facet_wrap(~Type)
   ggsave("rarefraction.pdf", device = "pdf", width = 8, height = 6)
-      
+
+# Species accumulation curve ------------------------------------------------------------
+  data_obj <- subset_samples(time_series_physeq, Quadrat=="Grossman1")
+  data_obj <- time_series_physeq
+  sp1 <- specaccum(t(otu_table(data_obj)))
+  sp2 <- specaccum(t(otu_table(data_obj)), "random")
+  p1 <- plot(sp2, ci.type="poly", col="blue", lwd=2, ci.lty=0, ci.col="lightblue")
+  boxplot(sp2, col="yellow", add=TRUE, pch="+")
+  par(mfrow=c(5,2))
+  par(mar=c(2,2,2,2))
+  plot(specaccum(t(otu_table( subset_samples(time_series_physeq_plant_filtered, Quadrat=="Grossman1") )), "random"), ci.type="poly", col="blue", lwd=2, ci.lty=0, ci.col="lightblue", main="Grossman1 plants")
+  plot(specaccum(t(otu_table( subset_samples(time_series_physeq_soil, Quadrat=="Grossman1") )), "random"), ci.type="poly", col="blue", lwd=2, ci.lty=0, ci.col="lightblue", main="Grossman1 soil")
+  plot(specaccum(t(otu_table( subset_samples(time_series_physeq_plant_filtered, Quadrat=="Grossman2") )), "random"), ci.type="poly", col="blue", lwd=2, ci.lty=0, ci.col="lightblue", main="Grossman2 plants")
+  plot(specaccum(t(otu_table( subset_samples(time_series_physeq_soil, Quadrat=="Grossman2") )), "random"), ci.type="poly", col="blue", lwd=2, ci.lty=0, ci.col="lightblue", main="Grossman2 soil")
+  
+  plot(specaccum(t(otu_table( subset_samples(time_series_physeq_plant_filtered, Quadrat=="Potato1") )), "random"), ci.type="poly", col="blue", lwd=2, ci.lty=0, ci.col="lightblue", main="Potato1 plants")
+  plot(specaccum(t(otu_table( subset_samples(time_series_physeq_soil, Quadrat=="Potato1") )), "random"), ci.type="poly", col="blue", lwd=2, ci.lty=0, ci.col="lightblue", main="Potato2 soil")
+  plot(specaccum(t(otu_table( subset_samples(time_series_physeq_plant_filtered, Quadrat=="Potato2") )), "random"), ci.type="poly", col="blue", lwd=2, ci.lty=0, ci.col="lightblue", main="Potato2 plants")
+  plot(specaccum(t(otu_table( subset_samples(time_series_physeq_soil, Quadrat=="Potato2") )), "random"), ci.type="poly", col="blue", lwd=2, ci.lty=0, ci.col="lightblue", main="Potato2 soil")
+  plot(specaccum(t(otu_table( subset_samples(time_series_physeq_plant_filtered, Quadrat=="Potato3") )), "random"), ci.type="poly", col="blue", lwd=2, ci.lty=0, ci.col="lightblue", main="Potato3 plants")
+  plot(specaccum(t(otu_table( subset_samples(time_series_physeq_soil, Quadrat=="Potato3") )), "random"), ci.type="poly", col="blue", lwd=2, ci.lty=0, ci.col="lightblue", main="Potato3 soil")
+  
 # GrossmanPond ------------------------------------------------------------
   ## Subset GrossmanPond samples
     grossman_physeq <- subset_samples(time_series_physeq, Quadrat=="Grossman1"|Quadrat=="Grossman2")
@@ -404,11 +531,11 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
     ### subset
       grossman1_physeq_transformed <- subset_samples(grossman_physeq_transformed, Quadrat=="Grossman1")
     ### ordination plot
-      grossman1_physeq_transformed.ord <- ordinate(grossman1_physeq_transformed, "PCoA", "bray")
+      grossman1_physeq_transformed.ord <- ordinate(grossman1_physeq_transformed, "PCoA", "wunifrac")
       grossman1_pcoa_all <- plot_ordination(grossman1_physeq_transformed, grossman1_physeq_transformed.ord, type="samples", color="Time") +
         geom_point(size=4) + scale_color_brewer(palette="YlGnBu") + labs(title="Grossman Q1 by Time") + facet_wrap(~Type, nrow=1) #+ coord_fixed()  
     ### PERMANOVA
-      grossman1_bray_dist <- phyloseq::distance(grossman1_physeq_transformed, method="bray")
+      grossman1_bray_dist <- phyloseq::distance(grossman1_physeq_transformed, method="wunifrac")
       permanova <- adonis(grossman1_bray_dist ~ sample_data(grossman1_physeq_transformed)$Time, permutations = 10000)
     ### network
       ig <- make_network(grossman1_physeq_transformed, distance="bray", type="samples", max.dist=0.4)
@@ -438,11 +565,11 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
     ### transform counts into proportion
       grossman2_physeq_transformed <- subset_samples(grossman_physeq_transformed, Quadrat=="Grossman2")
     ### ordination plot
-      grossman2_physeq_transformed.ord <- ordinate(grossman2_physeq_transformed, "PCoA", "bray")
+      grossman2_physeq_transformed.ord <- ordinate(grossman2_physeq_transformed, "PCoA", "wunifrac")
       grossman2_pcoa_all <- plot_ordination(grossman2_physeq_transformed, grossman2_physeq_transformed.ord, type="samples", color="Time") +
         geom_point(size=4) + scale_color_brewer(palette="YlGnBu") + labs(title="Grossman Q2 by Time") + facet_wrap(~Type, nrow=1) #+ coord_fixed()  
     ### PERMANOVA
-      grossman2_bray_dist <- phyloseq::distance(grossman2_physeq_transformed, method="bray")
+      grossman2_bray_dist <- phyloseq::distance(grossman2_physeq_transformed, method="wunifrac")
       permanova <- adonis(grossman2_bray_dist ~ sample_data(grossman2_physeq_transformed)$Time, permutations = 10000)
     ### network
       ig <- make_network(grossman2_physeq_transformed, distance="bray", max.dist=0.8)
@@ -494,7 +621,7 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
     potato_physeq_transformed <- merge_phyloseq(potato_physeq_plantsonly_transformed, potato_physeq_soil_transformed)
     potato_physeq_filtered <- merge_phyloseq(potato_physeq_plantsonly_filtered, potato_physeq_soil)
   ## ALL ordination plot
-    potato_physeq_transformed.ord <- ordinate(potato_physeq_transformed, "PCoA", "unifrac", "weighted")
+    potato_physeq_transformed.ord <- ordinate(potato_physeq_transformed, "PCoA", "wunifrac")
     potato_pcoa_all <- plot_ordination(potato_physeq_transformed, potato_physeq_transformed.ord, type="samples", color="Quadrat", shape="Type") #+ geom_polygon(aes(fill=Quadrat))
     potato_pcoa_DF_all <- plot_ordination(potato_physeq_transformed, potato_physeq_transformed.ord, type="samples", color="Quadrat", justDF=TRUE) 
   ## ALL ordination but soil and plant separately
@@ -504,9 +631,30 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
     potato_pcoa_all_plantsonly <- ggplot(data = subset(potato_pcoa_DF_all, Type!='soil'), mapping = aes(x = Axis.1, y = Axis.2)) +
       geom_point(size=4, aes(color=Quadrat)) + geom_point(shape = 1,size = 4,colour = "black") + scale_color_manual(values=c("steelblue","gold2","darkseagreen")) + 
       coord_fixed()+ xlim(-0.52, 0.52) + ylim(-0.55, 0.35) + ggtitle("PotatoHill Plants")
-  ## ALL unifrac plot
-    #potato_physeq_transformed_Wunifrac.ord = ordinate(potato_physeq_transformed, "PCoA", "unifrac", weighted=TRUE)
-    #plot_ordination(potato_physeq_transformed, potato_physeq_transformed_Wunifrac.ord, type="samples", color="Quadrat", shape="Type") #+ geom_polygon(aes(fill=Quadrat))
+  ## Plant samples, unweighted unifrac
+    potato_physeq_plantsonly_transformed.ord <- ordinate(potato_physeq_plantsonly_transformed, "PCoA", "unifrac")
+    potato_pcoa_all_plantsonly <- plot_ordination(potato_physeq_plantsonly_transformed, potato_physeq_plantsonly_transformed.ord, color="Quadrat") +
+      geom_point(size=4, aes(color=Quadrat)) + geom_point(shape = 1,size = 4,colour = "black") + scale_color_manual(values=c("steelblue","gold2","darkseagreen")) +
+      ggtitle("Plants unweighted unifrac")
+  ## Soil samples, unweighted unifrac
+    potato_physeq_soil_transformed.ord <- ordinate(potato_physeq_soil_transformed, "PCoA", "unifrac")
+    potato_pcoa_all_soil <- plot_ordination(potato_physeq_soil_transformed, potato_physeq_soil_transformed.ord, color="Quadrat") +
+      geom_point(size=4, aes(color=Quadrat)) + geom_point(shape = 1,size = 4,colour = "black") + scale_color_manual(values=c("steelblue","gold2","darkseagreen")) +
+      ggtitle("Soils unweighted unifrac")
+  ## Plant samples, weighted unifrac
+    potato_physeq_plantsonly_transformed_w.ord <- ordinate(potato_physeq_plantsonly_transformed, "PCoA", "wunifrac")
+    potato_pcoa_all_plantsonly_w <- plot_ordination(potato_physeq_plantsonly_transformed, potato_physeq_plantsonly_transformed_w.ord, color="Quadrat") +
+      geom_point(size=4, aes(color=Quadrat)) + geom_point(shape = 1,size = 4,colour = "black") + scale_color_manual(values=c("steelblue","gold2","darkseagreen")) +
+      ggtitle("Plants weighted unifrac")
+  ## Soil samples, weighted unifrac
+    potato_physeq_soil_transformed_w.ord <- ordinate(potato_physeq_soil_transformed, "PCoA", "wunifrac", )
+    potato_pcoa_all_soil_w <- plot_ordination(potato_physeq_soil_transformed, potato_physeq_soil_transformed_w.ord, color="Quadrat") +
+      geom_point(size=4, aes(color=Quadrat)) + geom_point(shape = 1,size = 4,colour = "black") + scale_color_manual(values=c("steelblue","gold2","darkseagreen")) +
+      ggtitle("Soils weighted unifrac")
+    
+  (potato_pcoa_all_soil_w | potato_pcoa_all_soil) / (potato_pcoa_all_plantsonly_w | potato_pcoa_all_plantsonly) + plot_layout(guides = 'collect')
+  ggsave("potato_pcoa_plants_soils_weighted_unweighted_unifrac.svg", device = "svg", width = 12, height = 10)
+    
   ## PERMANOVA test
     potato_bray_dist <- phyloseq::distance(potato_physeq_transformed, method="bray")
     adonis(potato_bray_dist ~ sample_data(potato_physeq_transformed)$Type, permutations = 10000)
@@ -556,8 +704,14 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
       permanova_des_plant <- paste("permanova ","R2=",substr(as.character(permanova$aov.tab$R2[1]),1,5)," ","p=",as.character(permanova$aov.tab$`Pr(>F)`[1]), sep = "")
       pairwise.perm.manova(potato3_bray_dist,sample_data(potato3_physeq_transformed_plantsonly)$Type,nperm=999)
       anova(betadisper(potato3_bray_dist, sample_data(potato3_physeq_transformed_plantsonly)$Type))  
+    ### PERMANOVA: plants only by type Unifrac
+      potato3_unifrac_dist <- phyloseq::distance(potato3_physeq_transformed_plantsonly, method="wunifrac")
+      permanova <- adonis(potato3_unifrac_dist ~ sample_data(potato3_physeq_transformed_plantsonly)$Type, permutations = 10000)
+      permanova_des_plant_unifrac <- paste("permanova ","R2=",substr(as.character(permanova$aov.tab$R2[1]),1,5)," ","p=",as.character(permanova$aov.tab$`Pr(>F)`[1]), sep = "")
+      beta <- betadisper(potato3_unifrac_dist, sample_data(potato3_physeq_transformed_plantsonly)$Type)
+      permutest(beta)
     ### PERMANOVA: soil + plants by time
-      potato3_bray_dist <- phyloseq::distance(potato3_physeq_transformed, method="bray")
+      potato3_bray_dist <- phyloseq::distance(potato3_physeq_transformed, method="wunifrac")
       adonis(potato3_bray_dist ~ sample_data(potato3_physeq_transformed)$Type + sample_data(potato3_physeq_transformed)$Time,permutations = 10000)
       adonis(potato3_bray_dist ~ sample_data(potato3_physeq_transformed)$Time,permutations = 10000)
     ### ordination plot: soil + plants by type
@@ -565,13 +719,16 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
       potato3_pcoa_all <- plot_ordination(potato3_physeq_transformed, potato3_physeq_transformed.ord, type="samples", color="Time") + 
         geom_point(size=4) + geom_point(shape = 1,size = 4,colour = "black") + scale_colour_manual(values = cbp1) + labs(title="Potato Q3 plant+soil",caption=permanova_des_all) #+ coord_fixed() 
     ### ordination plot: plants only by type
-      potato3_physeq_transformed_plantsonly <- subset_samples(potato3_physeq_transformed, Type=="Anthoceros"|Type=="Notothylas"|Type=="Phaeoceros")
-      #potato3_physeq_transformed_plantsonly.ord <- ordinate(potato3_physeq_transformed_plantsonly, "PCoA", "unifrac", weighted=TRUE)
       potato3_physeq_transformed_plantsonly.ord <- ordinate(potato3_physeq_transformed_plantsonly, "PCoA")
       potato3_pcoa <- plot_ordination(potato3_physeq_transformed_plantsonly, potato3_physeq_transformed_plantsonly.ord, type="samples", color="Type") +
         geom_point(size=4) + geom_point(shape = 1,size = 4,colour = "black") + scale_colour_manual(values = cbp1) + labs(title="Potato Q3 plant",caption=permanova_des_plant) #+ coord_fixed()  
-    ### ordination plot: soil + plants by time
-      potato3_pcoa_byT <- plot_ordination(potato3_physeq_transformed, potato3_physeq_transformed.ord, type="samples", color="Time") +
+    ### ordination plot: plants only by type Unifrac
+      potato3_physeq_transformed_plantsonly_unifrac.ord <- ordinate(potato3_physeq_transformed_plantsonly, "PCoA", "wunifrac")
+      potato3_pcoa_unifrac <- plot_ordination(potato3_physeq_transformed_plantsonly, potato3_physeq_transformed_plantsonly_unifrac.ord, type="samples", color="Type") +
+        geom_point(size=4) + geom_point(shape = 1,size = 4,colour = "black") + scale_colour_manual(values = cbp1) + labs(title="Potato Q3 plant",caption=permanova_des_plant_unifrac) #+ coord_fixed()  
+    ### ordination plot: soil + plants by time Unifrac
+      potato3_physeq_transformed_unifrac.ord <- ordinate(potato3_physeq_transformed, "PCoA", "wunifrac")
+      potato3_pcoa_byT <- plot_ordination(potato3_physeq_transformed, potato3_physeq_transformed_unifrac.ord, type="samples", color="Time") +
         geom_point(size=4) + scale_color_brewer(palette="YlGnBu") + labs(title="Potato Q3 by Time") + facet_wrap(~Type, nrow=1) #+ coord_fixed()  
     ### plot top influencer taxa among plant hosts
       permanova <- adonis(t(otu_table(potato3_physeq_transformed_plantsonly)) ~ sample_data(potato3_physeq_transformed_plantsonly)$Type)
@@ -590,6 +747,10 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
       plot_net(potato3_physeq_transformed_plantsonly, distance = "bray", maxdist = 0.4, color = "Type", laymeth="fruchterman.reingold")
       ig <- make_network(potato3_physeq_transformed_plantsonly, distance="bray", max.dist=0.4)
       potato3_net <- plot_network(ig, potato3_physeq_transformed_plantsonly, color = "Type", label=NULL, point_size=4) + 
+        geom_point(shape = 1,size = 4,colour = "black") + scale_colour_manual(values = cbp1) #+ coord_fixed()
+    ### network: plants only Unifrac
+      ig <- make_network(potato3_physeq_transformed_plantsonly, distance="wunifrac", max.dist=0.1)
+      potato3_net_unifrac <- plot_network(ig, potato3_physeq_transformed_plantsonly, color = "Type", label=NULL, point_size=4) + 
         geom_point(shape = 1,size = 4,colour = "black") + scale_colour_manual(values = cbp1) #+ coord_fixed()
     ### T1
       potato3_physeq_transformed_T1 <- subset_samples(potato3_physeq_transformed_plantsonly, Time=="T1")
@@ -681,13 +842,16 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
       pairwise.perm.manova(potato1_bray_dist,sample_data(potato1_physeq_transformed)$Type,nperm=999)
     ### PERMANOVA: plants only
       potato1_physeq_transformed_plantsonly <- subset_samples(potato1_physeq_transformed, Type=="Anthoceros"|Type=="Notothylas"|Type=="Phaeoceros")
-      #potato1_bray_dist <- phyloseq::distance(potato1_physeq_transformed_plantsonly, method="unifrac", weighted=TRUE)
       potato1_bray_dist <- phyloseq::distance(potato1_physeq_transformed_plantsonly, method="bray")
       permanova <- adonis(potato1_bray_dist ~ sample_data(potato1_physeq_transformed_plantsonly)$Type, permutation=10000)
       permanova_des_plants <- paste("permanova ","R2=",substr(as.character(permanova$aov.tab$R2[1]),1,5)," ","p=",as.character(permanova$aov.tab$`Pr(>F)`[1]), sep = "")
       pairwise.perm.manova(potato1_bray_dist,sample_data(potato1_physeq_transformed_plantsonly)$Type,nperm=999)
+    ### PERMANOVA: plants only Unifrac
+      potato1_unifrac_dist <- phyloseq::distance(potato1_physeq_transformed_plantsonly, method="wunifrac")
+      permanova <- adonis(potato1_unifrac_dist ~ sample_data(potato1_physeq_transformed_plantsonly)$Type, permutation=10000)
+      permanova_des_plants_unifrac <- paste("permanova ","R2=",substr(as.character(permanova$aov.tab$R2[1]),1,5)," ","p=",as.character(permanova$aov.tab$`Pr(>F)`[1]), sep = "")
     ### PERMANOVA: soil + plants by time
-      potato1_bray_dist <- phyloseq::distance(potato1_physeq_transformed, method="bray")
+      potato1_bray_dist <- phyloseq::distance(potato1_physeq_transformed, method="wunifrac")
       adonis(potato1_bray_dist ~ sample_data(potato1_physeq_transformed)$Type + sample_data(potato1_physeq_transformed)$Time, permutations = 10000)
       adonis(potato1_bray_dist ~ sample_data(potato1_physeq_transformed)$Time, permutations = 10000)
     ### ordination plot: soil + plants
@@ -695,14 +859,15 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
       potato1_pcoa_all <- plot_ordination(potato1_physeq_transformed, potato1_physeq_transformed.ord, type="samples", color="Type") + 
         geom_point(size=4) + geom_point(shape = 1,size = 4,colour = "black") + scale_colour_manual(values = cbp1) + labs(title="Potato Q1 plant+soil",caption=permanova_des_all) #+ coord_fixed() 
     ### ordination plot: plants only
-      potato1_physeq_transformed_plantsonly <- subset_samples(potato1_physeq_transformed, Type=="Anthoceros"|Type=="Notothylas"|Type=="Phaeoceros")
-      #potato1_physeq_transformed_plantsonly.ord <- ordinate(potato1_physeq_transformed_plantsonly, "PCoA", "unifrac", weighted=TRUE)
       potato1_physeq_transformed_plantsonly.ord <- ordinate(potato1_physeq_transformed_plantsonly, "PCoA", "bray")
-      potato1_pcoa <- plot_ordination(potato1_physeq_transformed_plantsonly, potato1_physeq_transformed_plantsonly.ord, type="samples", color="Type") + #+ geom_polygon(aes(fill=Type))
-        geom_point(size=4) + scale_colour_manual(values = cbp1) + coord_fixed()
       potato1_pcoa <- plot_ordination(potato1_physeq_transformed_plantsonly, potato1_physeq_transformed_plantsonly.ord, type="samples", color="Type") + 
         geom_point(size=4) + geom_point(shape = 1,size = 4,colour = "black") + scale_colour_manual(values = cbp1) + labs(title="Potato Q1 plant",caption=permanova_des_plants) #+ coord_fixed() 
+    ### ordination plot: plants only Unifrac
+      potato1_physeq_transformed_plantsonly_unifrac.ord <- ordinate(potato1_physeq_transformed_plantsonly, "PCoA", "wunifrac")
+      potato1_pcoa_unifrac <- plot_ordination(potato1_physeq_transformed_plantsonly, potato1_physeq_transformed_plantsonly_unifrac.ord, type="samples", color="Type") + 
+        geom_point(size=4) + geom_point(shape = 1,size = 4,colour = "black") + scale_colour_manual(values = cbp1) + labs(title="Potato Q1 plant",caption=permanova_des_plants_unifrac) #+ coord_fixed() 
     ### ordination plot: soil + plants by time
+      potato1_physeq_transformed.ord <- ordinate(potato1_physeq_transformed, "PCoA", "wunifrac")
       potato1_pcoa_byT <- plot_ordination(potato1_physeq_transformed, potato1_physeq_transformed.ord, type="samples", color="Time") +
         geom_point(size=4) + scale_color_brewer(palette="YlGnBu") + labs(title="Potato Q1 by Time") + facet_wrap(~Type, nrow=1) #+ coord_fixed()  
       plot_ordination(potato1_physeq_transformed, potato1_physeq_transformed.ord, type="samples", color="Time") +
@@ -716,6 +881,10 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
       plot_net(potato1_physeq_transformed_plantsonly, distance = "bray", maxdist = 0.2, color = "Type", laymeth="fruchterman.reingold")
       ig <- make_network(potato1_physeq_transformed_plantsonly, distance="bray", max.dist=0.4)
       potato1_net <- plot_network(ig, potato1_physeq_transformed_plantsonly, color = "Type", label=NULL, point_size = 4) +
+        geom_point(shape = 1,size = 4,colour = "black") + scale_colour_manual(values = cbp1) #+ coord_fixed()
+    ### network: plants only Unifract
+      ig <- make_network(potato1_physeq_transformed_plantsonly, distance="wunifrac", max.dist=0.1)
+      potato1_net_unifrac <- plot_network(ig, potato1_physeq_transformed_plantsonly, color = "Type", label=NULL, point_size = 4) +
         geom_point(shape = 1,size = 4,colour = "black") + scale_colour_manual(values = cbp1) #+ coord_fixed()
     ### T1
       potato1_physeq_transformed_T1 <- subset_samples(potato1_physeq_transformed_plantsonly, Time=="T1")
@@ -807,13 +976,16 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
       pairwise.perm.manova(potato2_bray_dist,sample_data(potato2_physeq_transformed)$Type,nperm=10000)
     ### PERMANOVA: plants only
       potato2_physeq_transformed_plantsonly <- subset_samples(potato2_physeq_transformed, Type=="Anthoceros"|Type=="Notothylas"|Type=="Phaeoceros")
-      #potato2_bray_dist <- phyloseq::distance(potato2_physeq_transformed_plantsonly, method="unifrac", weighted=TRUE)
       potato2_bray_dist <- phyloseq::distance(potato2_physeq_transformed_plantsonly, method="bray")
       permanova <- adonis(potato2_bray_dist ~ sample_data(potato2_physeq_transformed_plantsonly)$Type, permutations = 10000)
       permanova_des_plants <- paste("permanova ","R2=",substr(as.character(permanova$aov.tab$R2[1]),1,5)," ","p=",as.character(permanova$aov.tab$`Pr(>F)`[1]), sep = "")
       pairwise.perm.manova(potato2_bray_dist,sample_data(potato2_physeq_transformed_plantsonly)$Type,nperm=999)
-    ### PERMANOVA: soil + plants by time
-      potato2_bray_dist <- phyloseq::distance(potato2_physeq_transformed, method="bray")
+    ### PERMANOVA: plants only Unifrac
+      potato2_unifrac_dist <- phyloseq::distance(potato2_physeq_transformed_plantsonly, method="wunifrac")
+      permanova <- adonis(potato2_unifrac_dist ~ sample_data(potato2_physeq_transformed_plantsonly)$Type, permutations = 10000)
+      permanova_des_plants_unifrac <- paste("permanova ","R2=",substr(as.character(permanova$aov.tab$R2[1]),1,5)," ","p=",as.character(permanova$aov.tab$`Pr(>F)`[1]), sep = "")
+    ### PERMANOVA: soil + plants by time 
+      potato2_bray_dist <- phyloseq::distance(potato2_physeq_transformed, method="wunifrac")
       adonis(potato2_bray_dist ~ sample_data(potato2_physeq_transformed)$Type + sample_data(potato2_physeq_transformed)$Time, permutations = 10000)
       adonis(potato2_bray_dist ~ sample_data(potato2_physeq_transformed)$Time, permutations = 10000)
     ### ANOSIM: test
@@ -830,8 +1002,13 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
         geom_point(size=4) + scale_colour_manual(values = cbp1) + coord_fixed()
       potato2_pcoa <- plot_ordination(potato2_physeq_transformed_plantsonly, potato2_physeq_transformed_plantsonly.ord, type="samples", color="Type") + 
         geom_point(size=4) + geom_point(shape = 1,size = 4,colour = "black") + scale_colour_manual(values = cbp1) + labs(title="Potato Q2 plant",caption=permanova_des_plants) #+ coord_fixed() 
+    ### ordination plot: plants only Unifrac
+      potato2_physeq_transformed_plantsonly_unifrac.ord <- ordinate(potato2_physeq_transformed_plantsonly, "PCoA", "wunifrac")
+      potato2_pcoa_unifrac <- plot_ordination(potato2_physeq_transformed_plantsonly, potato2_physeq_transformed_plantsonly_unifrac.ord, type="samples", color="Type") + 
+        geom_point(size=4) + geom_point(shape = 1,size = 4,colour = "black") + scale_colour_manual(values = cbp1) + labs(title="Potato Q2 plant",caption=permanova_des_plants_unifrac) #+ coord_fixed() 
     ### ordination plot: soil + plants by time
-      potato2_pcoa_byT <- plot_ordination(potato2_physeq_transformed, potato2_physeq_transformed.ord, type="samples", color="Time") +
+      potato2_physeq_transformed_unifrac.ord <- ordinate(potato2_physeq_transformed, "PCoA", "wunifrac")
+      potato2_pcoa_byT <- plot_ordination(potato2_physeq_transformed, potato2_physeq_transformed_unifrac.ord, type="samples", color="Time") +
         geom_point(size=4) + scale_color_brewer(palette="YlGnBu") + labs(title="Potato Q2 by time") + facet_wrap(~Type, nrow=1) #+ coord_fixed()  
     ### network: soil + plants
       plot_net(potato2_physeq_transformed, distance = "bray", maxdist = 0.2, color = "Type", laymeth="fruchterman.reingold")
@@ -842,6 +1019,10 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
       plot_net(potato2_physeq_transformed_plantsonly, distance = "bray", maxdist = 0.2, color = "Type", laymeth="fruchterman.reingold")
       ig <- make_network(potato2_physeq_transformed_plantsonly, distance="bray", max.dist=0.4)
       potato2_net <- plot_network(ig, potato2_physeq_transformed_plantsonly, color = "Type", label=NULL, point_size = 4) +
+        geom_point(shape = 1,size = 4,colour = "black") + scale_colour_manual(values = cbp1) #+ coord_fixed()
+    ### network: plants only Unifrac
+      ig <- make_network(potato2_physeq_transformed_plantsonly, distance="wunifrac", max.dist=0.1)
+      potato2_net_unifrac <- plot_network(ig, potato2_physeq_transformed_plantsonly, color = "Type", label=NULL, point_size = 4) +
         geom_point(shape = 1,size = 4,colour = "black") + scale_colour_manual(values = cbp1) #+ coord_fixed()
     ### T1
       potato2_physeq_transformed_T1 <- subset_samples(potato2_physeq_transformed_plantsonly, Time=="T1")
@@ -935,6 +1116,10 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
   (potato1_pcoa | potato2_pcoa | potato3_pcoa)/(potato1_net | potato2_net | potato3_net) + plot_layout(guides = 'collect')
   ggsave("potato_pcoa_plants_byQ.pdf", device = "pdf", width = 18, height = 12)
   ggsave("potato_pcoa_plants_byQ.svg", device = "svg", width = 18, height = 12)
+
+  (potato1_pcoa_unifrac | potato2_pcoa_unifrac | potato3_pcoa_unifrac) + plot_layout(guides = 'collect')
+  ggsave("potato_pcoa_plants_byQ_unifrac.pdf", device = "pdf", width = 18, height = 6)
+  ggsave("potato_pcoa_plants_byQ_unifrac.svg", device = "svg", width = 18, height = 6)
   
   (potato1_pcoa_all | potato2_pcoa_all | potato3_pcoa_all)/(potato1_net_all | potato2_net_all | potato3_net_all) + plot_layout(guides = 'collect')
   ggsave("potato_pcoa_plants_soils_byQ.pdf", device = "pdf", width = 18, height = 12)
@@ -1144,11 +1329,12 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
       chisq.test(chi_df)
     
   # Read OTU 0.97 table
-    otu97 <- as.matrix(read.table("/Users/fay-weili/Box/hornwort_amplicon/dada2/mock/sample_fastq_deprimers_lenfiltered_mock/mock_OTUtable97.txt", header=TRUE, sep = "\t", row.names = 1))
+    otu97 <- as.matrix(read.table("/Users/fay-weili/Box/hornwort_amplicon/dada2/sample_fastq_deprimers_lenfiltered_JNP1-3_vsearch_2/all_OTUtable97_mocks.txt", header=TRUE, sep = "\t", row.names = 1))
+    otu97_no_singleton <- replace(otu97, otu97 == 1, 0)
   # Read sample metadata
-    sample_mock_meta_file_otu <- read.table("/Users/fay-weili/Box/hornwort_amplicon/dada2/mock/sample_fastq_deprimers_lenfiltered_mock/MockMeta.csv", header=TRUE, sep = ",", row.names = 1)
+    sample_mock_meta_file_otu <- read.table("/Users/fay-weili/Box/hornwort_amplicon/dada2/sample_fastq_deprimers_lenfiltered_JNP1-3_vsearch/MockMeta.csv", header=TRUE, sep = ",", row.names = 1)
   # Make phyloseq object
-    otu97_table_mock <- otu_table(otu97, taxa_are_rows = TRUE)
+    otu97_table_mock <- otu_table(otu97_no_singleton, taxa_are_rows = TRUE)
     sample_meta_mock_otu <- sample_data(sample_mock_meta_file_otu)
     otu97_mock_physeq = phyloseq(otu97_table_mock, sample_meta_mock_otu) #, ASV_tree_file)
     otu97_mock_physeq_transformed  = transform_sample_counts(otu97_mock_physeq, function(x) x / sum(x) )
@@ -1158,16 +1344,19 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
     rownames(taxmat) <- rownames(otu_table(otu97_mock_physeq_transformed_sub))
     colnames(taxmat) <- "Species"
     otu97_mock_physeq_transformed_tax = merge_phyloseq(otu97_mock_physeq_transformed_sub, tax_table(taxmat))
+    otu97_mock_physeq_transformed_tax = filter_taxa(otu97_mock_physeq_transformed_tax, function(x) sum(x) > 0, TRUE)
     p_OTU97 <- plot_bar(otu97_mock_physeq_transformed_tax, fill="Species") + theme(legend.position = "none")
     #p_OTU97$data$Sample <- factor(p_OTU97$data$Sample, levels = list("pos_mock_community_pilot_run", "mock_community_3taxa_JNP4_8_H01", "mock_community_5taxa_JNP1_5_E01", "mock_community_5taxa_JNP2_6_F01", "mock_community_5taxa_JNP3_7_G01", "mock_community_5taxa_JNP4_8_H01"))
     p_OTU97
+    colSums(otu_table(otu97_mock_physeq_transformed_tax) != 0)
     
   # Read OTU 0.95 table
-    otu95 <- as.matrix(read.table("/Users/fay-weili/Box/hornwort_amplicon/dada2/mock/sample_fastq_deprimers_lenfiltered_mock/mock_OTUtable95.txt", header=TRUE, sep = "\t", row.names = 1))
+    otu95 <- as.matrix(read.table("/Users/fay-weili/Box/hornwort_amplicon/dada2/sample_fastq_deprimers_lenfiltered_JNP1-3_vsearch_2/all_OTUtable95_mocks.txt", header=TRUE, sep = "\t", row.names = 1))
+    otu95_no_singleton <- replace(otu95, otu95 == 1, 0)
   # Read sample metadata
-    sample_mock_meta_file_otu <- read.table("/Users/fay-weili/Box/hornwort_amplicon/dada2/mock/sample_fastq_deprimers_lenfiltered_mock/MockMeta.csv", header=TRUE, sep = ",", row.names = 1)
+    sample_mock_meta_file_otu <- read.table("/Users/fay-weili/Box/hornwort_amplicon/dada2/sample_fastq_deprimers_lenfiltered_JNP1-3_vsearch/MockMeta.csv", header=TRUE, sep = ",", row.names = 1)
   # Make phyloseq object
-    otu95_table_mock <- otu_table(otu95, taxa_are_rows = TRUE)
+    otu95_table_mock <- otu_table(otu95_no_singleton, taxa_are_rows = TRUE)
     sample_meta_mock_otu <- sample_data(sample_mock_meta_file_otu)
     otu95_mock_physeq = phyloseq(otu95_table_mock, sample_meta_mock_otu) #, ASV_tree_file)
     otu95_mock_physeq_transformed  = transform_sample_counts(otu95_mock_physeq, function(x) x / sum(x) )
@@ -1177,13 +1366,15 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
     rownames(taxmat) <- rownames(otu_table(otu95_mock_physeq_transformed_sub))
     colnames(taxmat) <- "Species"
     otu95_mock_physeq_transformed_tax = merge_phyloseq(otu95_mock_physeq_transformed_sub, tax_table(taxmat))
+    otu95_mock_physeq_transformed_tax = filter_taxa(otu95_mock_physeq_transformed_tax, function(x) sum(x) > 0, TRUE)
     p_OTU95 <- plot_bar(otu95_mock_physeq_transformed_tax, fill="Species") + theme(legend.position = "none")
     #p_OTU95$data$Sample <- factor(p_OTU95$data$Sample, levels = list("pos_mock_community_pilot_run", "mock_community_3taxa_JNP4_8_H01", "mock_community_5taxa_JNP1_5_E01", "mock_community_5taxa_JNP2_6_F01", "mock_community_5taxa_JNP3_7_G01", "mock_community_5taxa_JNP4_8_H01"))
     p_OTU95
+    colSums(otu_table(otu95_mock_physeq_transformed_tax) != 0)
     
     p_ASV | p_tree / (p_OTU97 | p_OTU95) 
     p_tree | p_ASV | p_OTU97 | p_OTU95 
-    ggsave("mock_comparison.pdf", device = "pdf", width = 18, height = 12)
+    ggsave("mock_comparison2.pdf", device = "pdf", width = 18, height = 12)
   
 # Alpha diversity ------------------------------------------------------------
   potato_physeq <- subset_samples(time_series_physeq, Quadrat=="Potato1"|Quadrat=="Potato2"|Quadrat=="Potato3")
@@ -1355,7 +1546,7 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
       TukeyHSD(anov_MPD, which = "Type")
       
     ### Make plot object
-     p_alpha_3percfilt_nosoil <- (chao_all | shannon_all | PD_all | MPD_all) + plot_layout(guides = 'collect')
+     p_alpha_3percfilt_nosoil <- (chao_all | simpson_all | shannon_all | PD_all | MPD_all) + plot_layout(guides = 'collect')
   ## ^Plot ====
     p_alpha_3percfilt_nosoil
     ggsave("alpha_diversity_filt_nosoil.pdf", device = "pdf", width = 12, height = 5)
@@ -1385,6 +1576,62 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
     alphadiv_by_cat(grossman_physeq_plantsonly_filtered,"Type")  
     alphadiv_by_cat(potato_physeq_plantsonly_filtered,"QuadratxType")  
     alphadiv_by_cat(time_series_physeq_filtered,"Type")
+
+# Top ASV ------------------------------------------------------------
+    ASV_melt <- reshape2::melt(otu_table(time_series_physeq_filtered_tranformed),value.name="abundance",varnames=c("ASV","Sample"))
+    top_ASV_count <- ASV_melt %>% group_by(Sample) %>% summarize(topASV=max(abundance))
+    meta <- as_tibble(sample_data(time_series_physeq_filtered_tranformed), rownames="Sample")
+    top_ASV_count_meta <- left_join(top_ASV_count, meta, by = "Sample")
+    count_50 <- top_ASV_count_meta %>% filter(topASV>0.5) %>% group_by(Type) %>% summarize(count=n())
+    top_ASV_count_meta %>% group_by(Type) %>% summarize(count=n())
+    
+    ggplot(top_ASV_count_meta) + geom_histogram(aes(x=topASV, fill=Type),binwidth = 0.075) + 
+      geom_vline(data=top_ASV_count_meta, aes(xintercept=0.5), linetype="dashed") + 
+      labs(title = "", y="Number of sample", x="Relative abundance of the most abundant ASV") + 
+      scale_fill_manual(values = cbp1) + facet_wrap(~Type,ncol=1) 
+    ggsave("top_ASV_distri.pdf", device = "pdf", width = 5, height = 8)
+
+    ggplot(top_ASV_count_meta, aes(x = Type, y = topASV)) + 
+      geom_violin(aes(fill=Type), scale="width") + geom_boxplot(width=0.1) +
+      labs(title = "", y="Relative abundance") + 
+      scale_colour_manual(values = cbp1) + scale_fill_manual(values = cbp1)
+    anov_topASV <- aov(topASV ~ Type + Quadrat + Time, data = top_ASV_count_meta)
+    summary(anov_topASV)
+    TukeyHSD(anov_topASV, which = "Type")
+ 
+    x_coor <- vector()
+    y_coor <- vector()
+    sample_name_list <- vector()
+    phyloseq_obj <- time_series_physeq_transformed
+    for ( sample in 1:ncol(as.data.frame(otu_table(phyloseq_obj))) ) {
+      sample_name <- colnames(as.data.frame(otu_table(phyloseq_obj)))[sample]
+      list <- as.data.frame(otu_table(phyloseq_obj))[,sample]
+      ASV_freq_list <- sort(list, decreasing = F)
+      ASV_freq_list <- ASV_freq_list[ ASV_freq_list > 0 ]
+      counter = 1
+      for (freq in ASV_freq_list) { 
+        y_coor <- append(y_coor, freq)
+        sample_name_list <- append(sample_name_list, sample_name)
+        if (counter==1) {
+          x_coor <- append(x_coor, 0) 
+          x_accumulator <- freq }
+        else {
+          x_coor <- append(x_coor, x_accumulator)
+          x_accumulator <- x_accumulator + freq }
+        #print(counter)
+        if (counter==length(ASV_freq_list)) {
+          y_coor <- append(y_coor, freq)
+          x_coor <- append(x_coor, x_accumulator) 
+          sample_name_list <- append(sample_name_list, sample_name)}
+        counter = counter + 1
+        }
+    }
+    table <- tibble(a=x_coor, b=y_coor, Sample=sample_name_list)
+    ASV_accum_meta <- left_join(table, meta, by = "Sample")
+    ggplot(ASV_accum_meta) + geom_step(aes(x=a, y=b, group=Sample, color=Type)) +
+      labs(title = "", x="Proportion of the community", y="Relative abundance of each ASV") + 
+      scale_color_manual(values = cbp1) + facet_wrap(~Type,ncol=2) 
+    ggsave("all_ASV_distri.pdf", device = "pdf", width = 12, height = 8)
     
 ### BSL_SHH #### 
   # Read ASV table

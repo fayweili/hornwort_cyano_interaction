@@ -17,11 +17,26 @@ mkdir split_bams
 cd split_bams
 lima --different --ccs --num-threads 44 --min-length 100 --min-score 26 --split-bam-named ../pilot_run_ccs_p5_rq0.999.bam ../barcodes.fasta pilot_run_ccs_p5_rq0.999_demux.bam
 ```
+* the sequence headers in `bacode.fasta` should correspond to the barcode names in `barcode-map.txt` below. For example:
+```
+>BCF1
+GCGCTCTGTGTGCAGC
+>BCF2
+TCATGAGTCGACACTA
+>BCF3
+TATCTATCGTATACGC
+>BCR1
+TCATATGTAGTACTCT
+>BCR2
+GCGATCTATGCACACG
+>BCR3
+TGCAGTCGAGATACAT
+```
 **Rename the bam files given the barcode combinations**
 ```
 assign_sample.py barcode-map.txt
 ```
-* the `barcode-map.txt` file should look like this:
+* the `barcode-map.txt` file should tab-delimited, where first and second columns are barcode names and the third is the sample name:  
 ```
 BCF1	BCR1	mock_community_5taxa
 BCF2	BCR1	negative_control

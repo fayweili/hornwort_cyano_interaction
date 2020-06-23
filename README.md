@@ -81,7 +81,7 @@ seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=TRUE
 dim(seqtab.nochim)
 sum(seqtab.nochim)/sum(seqtab)
 ```
-** Hands-off to phyloseq for further processing **
+**Hands-off to phyloseq for further processing**
 ```R
 ## Make phyloseq object ##
 ps <- phyloseq(otu_table(seqtab.nochim, taxa_are_rows=FALSE)) #,sample_data(sample_df))

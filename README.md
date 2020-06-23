@@ -2,11 +2,11 @@
 * [ccs](https://github.com/PacificBiosciences/ccs)
 * [lima](https://github.com/PacificBiosciences/barcoding)
 * [bam2fastq](https://gsl.hudsonalpha.org/information/software/bam2fastq)
-* assign_sample.py
+* [assign_sample.py](https://github.com/fayweili/hornwort_cyano_interaction/blob/master/scripts/assign_sample.py)
 
 
 # Processing PacBio CCS reads
-Make CCS reads from PacBio subread bam file, requiring 5 minimum passes and expected accuracy of >0.999
+**Make CCS reads from PacBio subread bam file, requiring 5 minimum passes and expected accuracy of >0.999**
 ```bash
 ccs --report-file ccs_report_p5_rq0.999.txt --minLength=100 --maxLength=2000 --num-threads=12 --min-passes=5 --min-rq=0.999 m54089_180212_172613.subreads.bam pilot_run_ccs_p5_rq0.999.bam 
 ```

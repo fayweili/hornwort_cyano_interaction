@@ -16,6 +16,8 @@ library(ranacapa)
 library(picante)
 library(UpSetR)
 library(cowplot)
+library(ggplotify)
+library(reshape2)
 
 # Use these when plotting the trees #
 library(ggtree)
@@ -27,6 +29,7 @@ source("/Users/fay-weili/bin/ANCOM/scripts/ancom_v2.1.R")
 theme_set(theme_bw())
 cbp1 <- c("#E69F00", "#56B4E9", "#009E73","#999999", 
           "#F0E442", "#0072B2", "#D55E00", "#CC79A7")
+
 plot_ASV_deseq <- function(gene_to_plot) {
   geneCounts <- plotCounts(dds, gene = "ASV1", intgroup = 'Type', returnData = TRUE)
   ggplot(geneCounts, aes(x = Type, y = count, color = Type)) + geom_boxplot() + 
@@ -67,7 +70,7 @@ plot_ASV_soil <- function(ASV_to_plot, phyloseq_obj, violin=FALSE) {
 
 phyloseq2upsetr <- function(phyloseq_obj, category){
   #phyloseq_obj <- time_series_physeq_plant_filtered
-  #category <- "Type"
+  #category <- "Quadrat"
   sampleda <- sample_data(phyloseq_obj)[,match(category, colnames(sample_data(phyloseq_obj))),drop=FALSE]
   asv_meta <- merge(t(otu_table(phyloseq_obj)), sampleda, by=0)
   asv_meta <- tibble::column_to_rownames(asv_meta, var="Row.names")
@@ -83,12 +86,115 @@ phyloseq2upsetr <- function(phyloseq_obj, category){
   return(upset_data)
   }
 
+phyloseq2core <- function(phyloseq_obj, type, quadrat, time){
+  #phyloseq_obj <- potato_physeq_plantsonly_transformed
+  #quadrat <- 'Grossman1'
+  #time <- 'T1'
+  #type <- 'Noto'
+  #phyloseq_obj <- subset_samples(grossman2_physeq_transformed_Noto, Time=='T1')
+  tb <- otu_table(phyloseq_obj) %>% as("matrix") %>% tibble::as_tibble(rownames = "ASV")
+  nonzero <- function(x) sum(x != 0)
+  overhalf <- function(x) sum(x > 0.5)
+  countall <- function(x) sum(x >= 0)
+  rtb <- tb %>% rowwise(ASV)
+  table <- rtb %>% mutate(colno = countall(c_across(where(is.numeric))), total = (nonzero(c_across(where(is.numeric))) - 1)/colno) %>% 
+    select(total) %>% arrange(desc(total)) %>% filter(total >= 0.5) 
+  table <- table %>% tibble::add_column(Type=type, Quadrat=quadrat, Time=time)
+  if (dim(table)[1] != 0) {
+    asv_list <- pull(table,ASV)
+    abun_tb <- tb %>% filter(ASV %in% asv_list) %>% tibble::column_to_rownames(var='ASV')
+    #pheatmap(abun_tb,cluster_rows=FALSE, cluster_cols=FALSE)
+    colnames(abun_tb) <- c(1,2,3,4)
+    rownames(abun_tb) <- paste(rownames(abun_tb), quadrat, type, time, sep = "_")
+    abun_tb_melt <- reshape::melt(as.matrix(abun_tb),value.name="abundance",varnames=c("ASV","replicate"))
+    order <- rownames(abun_tb)
+    abun_tb_melt$ASV <- factor(abun_tb_melt$ASV, levels=order)
+    abun_tb_melt <- abun_tb_melt %>% tibble::add_column(Type=type, Quadrat=quadrat, Time=time)
+    #ggplot(data=abun_tb_melt, aes(x=ASV, y=replicate, fill=value)) + geom_tile()
+    return(abun_tb_melt)
+    }
+  else {
+    print('null')
+    }
+  #ggplot(data=abun_tb_melt) + geom_point(aes(y=ASV, x=abundance))
+  
+}
+
+tbl2hmap= function(tbl.long, rowVar, colVar, valueVar,
+                   colAnnVars = NULL, rowAnnVars = NULL) {
+  Mat0 = dplyr::select(tbl.long, one_of(c(rowVar, colVar,valueVar)))%>%
+    tidyr::spread_(key = colVar, value=valueVar)
+  Mat = select(Mat0, -one_of(rowVar)) %>% as.matrix()
+  rownames(Mat) = unlist(select(Mat0,one_of(rowVar)))
+  
+  colAnn = rowAnn= NULL
+  
+  if(!is.null(colAnnVars)) {
+    colAnn0 = dplyr::select(tbl.long,one_of( c(colVar,colAnnVars))) %>%
+      unique()
+    colAnn = select(colAnn0, - one_of(colVar)) %>% as.data.frame()
+    rownames(colAnn) = unlist(select( colAnn0,one_of(colVar)))
+  }
+  
+  if(!is.null(rowAnnVars)) {
+    rowAnn0 = dplyr::select(tbl.long,one_of(c( rowVar,rowAnnVars))) %>%
+      unique()
+    rowAnn = select(rowAnn0, -one_of( rowVar)) %>% as.data.frame()
+    rownames(rowAnn) = unlist(select(rowAnn0,one_of(rowVar)))
+  }
+  
+  list(mat = Mat, rowAnn =rowAnn, colAnn = colAnn)
+}
+
 filter5perc_count = function(x){
   x[(x / sum(x)) < (0.05)] <- 0
   return(x) }  
 filter3perc_count = function(x){
   x[(x / sum(x)) < (0.03)] <- 0
   return(x) } 
+
+plotDistances = function(p = grossman_physeq_transformed, m = "wunifrac", var1 = "Time", var2 = "Quadrat", var3 = "Type") {
+  # calc distances
+  wu = phyloseq::distance(p, m)
+  wu.m = melt(as.matrix(wu))
+  
+  # remove self-comparisons
+  wu.m = wu.m %>%
+    filter(as.character(Var1) != as.character(Var2)) %>%
+    mutate_if(is.factor,as.character)
+  colnames(wu.m) = c("sample1", "sample2", "value")
+  
+  # get sample data (S4 error OK and expected)
+  sd = as_tibble(sample_data(p),rownames="sample") %>% 
+    select(sample, var1, var2, var3) %>% mutate_if(is.factor,as.character)
+
+  # combined distances with sample data
+  colnames(sd) = c("sample1", "Var1a", "Var2a", "Var3a")
+  wu.sd = left_join(wu.m, sd, by = "sample1")
+  
+  colnames(sd) = c("sample2", "Var1b", "Var2b", "Var3b")
+  wu.sd = left_join(wu.sd, sd, by = "sample2")
+  
+  wu.sd = wu.sd %>% filter(as.character(Var1a) == as.character(Var1b)) %>% 
+    filter(as.character(Var2a) == as.character(Var2b)) %>%
+    filter(as.character(Var3a) == as.character(Var3b)) %>%
+    mutate_if(is.character, stringr::str_replace_all, pattern = "T", replacement = "")
+  
+  # plot 
+  ggplot(wu.sd, aes(x=Var1a, y=value, colour=Var3a)) + 
+    geom_point() + 
+    geom_smooth(aes(x=as.numeric(Var1a), y=value),method = "loess",se=T) + 
+    facet_grid(Var3a ~ Var2a) + scale_colour_manual(values = cbp1) +
+    xlab("Time points") + ylab("Pairwise weighted unifrac distance") 
+  #linearMod <- lm(value ~ as.numeric(Var1a), data=wu.sd)
+  #summary(linearMod)
+ }
+grossman_time_variance <- plotDistances(p = grossman_physeq_transformed, m = "wunifrac", var1 = "Time", var2 = "Quadrat", var3 = "Type")
+potato_time_variance <- plotDistances(p = potato_physeq_transformed, m = "wunifrac", var1 = "Time", var2 = "Quadrat", var3 = "Type")
+(grossman_time_variance / plot_spacer()) | potato_time_variance
+grossman_time_variance | potato_time_variance
+ggsave('unifrac_througthT.pdf', device = "pdf", width = 10, height = 5)
+ggsave('unifrac_througthT.svg', device = "svg", width = 10, height = 5)
 
 setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
 
@@ -106,25 +212,46 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
     time_series_physeq_transformed <- transform_sample_counts(time_series_physeq, function(x) x/sum(x))
     time_series_physeq_soil_transformed <- subset_samples(time_series_physeq_transformed, Type=="soil")
     time_series_physeq_plant_transformed <- subset_samples(time_series_physeq_transformed, Type=="Anthoceros"|Type=="Notothylas"|Type=="Phaeoceros")
+    time_series_physeq_soil <- subset_samples(time_series_physeq, Type=="soil")
+    time_series_physeq_soil_filtered <- transform_sample_counts(time_series_physeq_soil, fun = filter3perc_count)  
     time_series_physeq_plant <- subset_samples(time_series_physeq, Type=="Anthoceros"|Type=="Notothylas"|Type=="Phaeoceros")
     time_series_physeq_plant_filtered <- transform_sample_counts(time_series_physeq_plant, fun = filter3perc_count)  
-    time_series_physeq_soil <- subset_samples(time_series_physeq, Type=="soil")
-    time_series_physeq_filtered <- merge_phyloseq(time_series_physeq_plant_filtered, time_series_physeq_soil)
-    time_series_physeq_filtered_tranformed <- transform_sample_counts(time_series_physeq_filtered, function(x) x/sum(x))
+    time_series_physeq_filtered <- merge_phyloseq(time_series_physeq_soil_filtered, time_series_physeq_plant_filtered)
+    time_series_physeq_filtered_transformed <- transform_sample_counts(time_series_physeq_filtered, function(x) x/sum(x))
+    
+    time_series_physeq_soil_filtered_transformed <- transform_sample_counts(time_series_physeq_soil_filtered, function(x) x/sum(x))
+    tb <- otu_table(time_series_physeq_soil_filtered_transformed) %>% as("matrix") %>% tibble::as_tibble(rownames = "ASV")
+    nonzero <- function(x) sum(x != 0)
+    x <- numcolwise(nonzero)(tb)
+    mean(t(x))
     
     time_series_physeq_plant_filtered_transformed <- transform_sample_counts(time_series_physeq_plant_filtered, function(x) x/sum(x))  
     time_series_physeq_filtered_all <- transform_sample_counts(time_series_physeq, fun = filter3perc_count)  
     time_series_physeq_filtered_all_transformed <- transform_sample_counts(time_series_physeq_filtered_all, function(x) x/sum(x))  
     #write.table(otu_table(time_series_physeq_plant_filtered_transformed), quote=F, file="time_series_physeq_plant_filtered_transformed.txt", sep="\t")
     #write.table(otu_table(time_series_physeq_filtered_all_transformed), quote=F, file="time_series_physeq_filtered_all_transformed.txt", sep="\t")
+  
   ## UpsetR
     p_upset_quadrat <- upset(phyloseq2upsetr(time_series_physeq_filtered, "Quadrat"),order.by = "freq")
     P_upset_potato_type <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Potato1"|Quadrat=="Potato2"|Quadrat=="Potato3"), "Type"),order.by = "freq")
     P_upset_grossman_type <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Grossman1"|Quadrat=="Grossman2"), "Type"),order.by = "freq")
+    P_upset_all_type <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Grossman1"|Quadrat=="Grossman2"|Quadrat=="Potato1"|Quadrat=="Potato2"|Quadrat=="Potato3"), "Type"),order.by = "freq")
     upset_df <- phyloseq2upsetr(time_series_physeq_filtered, "Type")
-    write.table(upset_df, "ASV_by_type.txt", quote=F, sep="\t")
+    write.table(phyloseq2upsetr(time_series_physeq_filtered, "Quadrat"), "ASV_by_Q.txt", quote=F, sep="\t")
+    write.table(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Potato1"|Quadrat=="Potato2"|Quadrat=="Potato3"), "Type"), "ASV_by_Type_PH.txt", quote=F, sep="\t")
+    write.table(otu_table(time_series_physeq_filtered_transformed), "ASV_table_for_Jessica.txt", quote=F, sep="\t")
+    
+    #no singleton i.e. all ASVs appear in more than one sample
+    time_series_physeq_filtered_nosingleton <- filter_taxa(time_series_physeq_filtered, function(x){sum(x > 0) > 1}, prune = TRUE)
+    p_upset_quadrat <- upset(phyloseq2upsetr(time_series_physeq_filtered_nosingleton, "Quadrat"),order.by = "freq",
+                  sets = c("Grossman2","Grossman1","Potato3","Potato2","Potato1"),keep.order = TRUE)
+    P_upset_potato_type <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered_nosingleton, Quadrat=="Potato1"|Quadrat=="Potato2"|Quadrat=="Potato3"), "Type"),order.by = "freq",
+                  sets = c("soil","Notothylas","Phaeoceros","Anthoceros"),keep.order = TRUE)
+    P_upset_grossman_type <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered_nosingleton, Quadrat=="Grossman1"|Quadrat=="Grossman2"), "Type"),order.by = "freq")
+    
     ### plots
     library(grid)
+    library(svglite)
     p_upset_quadrat 
     grid.edit('arrange',name='arrange2')
     vp1 = grid.grab()
@@ -134,18 +261,25 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
     #P_upset_grossman_type
     #grid.edit('arrange',name='arrange2')
     #vp3 = grid.grab()
-    svg("upset_plot.svg", width = 9, height = 5)
+    svglite("upset_plot_nosingleton.svg", width = 9, height = 3.5)
     plot_grid(vp1,vp2, ncol = 2, labels = c('A', 'B'))
     dev.off()
     
     ### Time points
-    P_upset_potato_Q1_all_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Potato1"), "Time"),order.by = "freq")
-    P_upset_potato_Q1_plant_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_plant_filtered, Quadrat=="Potato1"), "Time"),order.by = "freq")
-    P_upset_potato_Q1_soil_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_soil, Quadrat=="Potato1"), "Time"),order.by = "freq")
-    P_upset_potato_Q2_all_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Potato2"), "Time"),order.by = "freq")
-    P_upset_potato_Q3_all_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Potato3"), "Time"),order.by = "freq")
-    P_upset_grossman_Q1_all_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Grossman1"), "Time"),order.by = "freq")
-    P_upset_grossman_Q2_all_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Grossman2"), "Time"),order.by = "freq")
+    P_upset_potato_Q1_all_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Potato1"), "Time"),order.by = "freq",
+                                        sets = c("T4","T3","T2","T1"),keep.order = TRUE)
+    P_upset_potato_Q1_plant_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_plant_filtered, Quadrat=="Potato1"), "Time"),order.by = "freq",
+                                          sets = c("T4","T3","T2","T1"),keep.order = TRUE)
+    P_upset_potato_Q1_soil_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_soil, Quadrat=="Potato1"), "Time"),order.by = "freq",
+                                         sets = c("T4","T3","T2","T1"),keep.order = TRUE)
+    P_upset_potato_Q2_all_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Potato2"), "Time"),order.by = "freq",
+                                        sets = c("T4","T3","T2","T1"),keep.order = TRUE)
+    P_upset_potato_Q3_all_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Potato3"), "Time"),order.by = "freq",
+                                        sets = c("T4","T3","T2","T1"),keep.order = TRUE)
+    P_upset_grossman_Q1_all_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Grossman1"), "Time"),order.by = "freq",
+                                          sets = c("T4","T3","T2","T1"),keep.order = TRUE)
+    P_upset_grossman_Q2_all_time <- upset(phyloseq2upsetr(subset_samples(time_series_physeq_filtered, Quadrat=="Grossman2"), "Time"),order.by = "freq",
+                                          sets = c("T3","T2","T1"),keep.order = TRUE)
     
     P_upset_grossman_Q1_all_time 
     grid.edit('arrange',name='arrange2')
@@ -153,7 +287,7 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
     P_upset_grossman_Q2_all_time 
     grid.edit('arrange',name='arrange2')
     vp2 = grid.grab()
-    svg("upset_plot_GrossmanQ_by_time.svg", width = 9, height = 5)
+    svglite("upset_plot_GrossmanQ_by_time_filtered.svg", width = 9, height = 5)
     plot_grid(vp1,vp2, ncol = 2, labels = c('GrossmanQ1', 'GrossmanQ2'))
     dev.off()
  
@@ -166,15 +300,15 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
     P_upset_potato_Q3_all_time 
     grid.edit('arrange',name='arrange2')
     vp32 = grid.grab()
-    svg("upset_plot_PotatoQ_by_time_.svg", width = 9, height = 9)
+    svglite("upset_plot_PotatoQ_by_time_filtered.svg", width = 9, height = 9)
     plot_grid(vp12,vp22,vp32,vp1,vp2, ncol = 3)
     dev.off()   
     
   ## PCoA of everything
     ### Color by Type
-      time_series_physeq_transformed.ord <- ordinate(time_series_physeq_filtered_tranformed, "PCoA", "bray")
-      time_series_pcoa_all <- plot_ordination(time_series_physeq_filtered_tranformed, time_series_physeq_transformed.ord, type="samples", color="Quadrat") 
-      time_series_pcoa_all_DF <- plot_ordination(time_series_physeq_filtered_tranformed, time_series_physeq_transformed.ord, type="samples", color="Quadrat", justDF=TRUE) 
+      time_series_physeq_transformed.ord <- ordinate(time_series_physeq_filtered_transformed, "PCoA", "bray")
+      time_series_pcoa_all <- plot_ordination(time_series_physeq_filtered_transformed, time_series_physeq_transformed.ord, type="samples", color="Quadrat") 
+      time_series_pcoa_all_DF <- plot_ordination(time_series_physeq_filtered_transformed, time_series_physeq_transformed.ord, type="samples", color="Quadrat", justDF=TRUE) 
       time_series_pcoa_all_soil <- ggplot(data = subset(time_series_pcoa_all_DF, Type=='soil'), mapping = aes(x = Axis.1, y = Axis.2)) +
         geom_point(size=1.8, shape=17, aes(color=Quadrat)) + geom_point(shape = 2,size = 1.8,colour = "black") + scale_color_manual(values=c("lightcoral","#7570B3","steelblue","gold2","darkseagreen")) +
         coord_fixed() + xlim(-0.52, 0.52)+ ylim(-0.4, 0.5) + ggtitle("Soil samples")
@@ -185,18 +319,23 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
       ggsave("potato_grossman_pcoa_plants_soils_allinone.pdf", device = "pdf", width = 10, height = 5)
       ggsave("potato_grossman_pcoa_plants_soils_allinone.svg", device = "svg", width = 10, height = 5)
       #### unifrac
-      time_series_physeq_transformed.ord <- ordinate(time_series_physeq_filtered_tranformed, "PCoA", "wunifrac")
-      time_series_pcoa_all <- plot_ordination(time_series_physeq_filtered_tranformed, time_series_physeq_transformed.ord, type="samples", color="Quadrat") 
-      time_series_pcoa_all_DF <- plot_ordination(time_series_physeq_filtered_tranformed, time_series_physeq_transformed.ord, type="samples", color="Quadrat", justDF=TRUE) 
+      time_series_physeq_transformed.ord <- ordinate(time_series_physeq_filtered_transformed, "PCoA", "wunifrac")
+      time_series_pcoa_all <- plot_ordination(time_series_physeq_filtered_transformed, time_series_physeq_transformed.ord, type="samples", color="Quadrat") 
+      time_series_pcoa_all_DF <- plot_ordination(time_series_physeq_filtered_transformed, time_series_physeq_transformed.ord, type="samples", color="Quadrat", justDF=TRUE) 
       time_series_pcoa_all_soil <- ggplot(data = subset(time_series_pcoa_all_DF, Type=='soil'), mapping = aes(x = Axis.1, y = Axis.2)) +
         geom_point(size=1.8, shape=17, aes(color=Quadrat)) + geom_point(shape = 2,size = 1.8,colour = "black") + scale_color_manual(values=c("lightcoral","#7570B3","steelblue","gold2","darkseagreen")) +
-        coord_fixed() + xlim(-0.13, 0.175)+ ylim(-0.125, 0.08) + ggtitle("Soil samples")
+        xlim(-0.13, 0.175)+ ylim(-0.125, 0.08) + ggtitle("Soil samples")
       time_series_pcoa_all_plant <- ggplot(data = subset(time_series_pcoa_all_DF, Type!='soil'), mapping = aes(x = Axis.1, y = Axis.2)) +
         geom_point(size=1.8, aes(color=Quadrat)) + geom_point(shape = 1,size = 1.8,colour = "black") + scale_color_manual(values=c("lightcoral","#7570B3","steelblue","gold2","darkseagreen")) +
-        coord_fixed()+ xlim(-0.13, 0.175)+ ylim(-0.125, 0.08) + ggtitle("Plant samples")
+        xlim(-0.13, 0.175)+ ylim(-0.125, 0.08) + ggtitle("Plant samples")
       time_series_pcoa_all_soil + time_series_pcoa_all_plant + plot_layout(guides = 'collect')
-      ggsave("potato_grossman_pcoa_plants_soils_allinone_unifrac.pdf", device = "pdf", width = 10, height = 5)
-      ggsave("potato_grossman_pcoa_plants_soils_allinone_unifrac.svg", device = "svg", width = 10, height = 5)
+      ggsave("potato_grossman_pcoa_plants_soils_allinone_unifrac.pdf", device = "pdf", width = 12, height = 3)
+      ggsave("potato_grossman_pcoa_plants_soils_allinone_unifrac.svg", device = "svg", width = 12, height = 3)
+      
+      time_series_pcoa_all <- ggplot(data = time_series_pcoa_all_DF, mapping = aes(x = Axis.1, y = Axis.2)) +
+        geom_point(size=1.8, aes(color=Quadrat, shape=)) + geom_point(shape = 1,size = 1.8,colour = "black") + scale_color_manual(values=c("lightcoral","#7570B3","steelblue","gold2","darkseagreen")) +
+        coord_fixed()+ xlim(-0.13, 0.175)+ ylim(-0.125, 0.08) + ggtitle("Plant samples")
+      
     ### Color by Time
       time_series_physeq_transformed.ord <- ordinate(time_series_physeq_transformed, "PCoA", "bray")
       time_series_pcoa_all_DF <- plot_ordination(time_series_physeq_transformed, time_series_physeq_transformed.ord, type="samples", color="Time", justDF=TRUE) 
@@ -602,6 +741,31 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
     (grossman1_pcoa_soil | grossman1_pcoa_Noto | grossman2_pcoa_soil | grossman2_pcoa_Noto ) + plot_layout(guides = 'collect')
     ggsave("grossman_pcoa_byQbyT.pdf", device = "pdf", width = 18, height = 5)
 
+  ## Core ASV
+    grossman1_T1 <- phyloseq2core(subset_samples(grossman1_physeq_transformed_Noto, Time=='T1'), 'Notothylas', 'Grossman1', 'T1')
+    grossman1_T2 <- phyloseq2core(subset_samples(grossman1_physeq_transformed_Noto, Time=='T2'), 'Notothylas', 'Grossman1', 'T2')
+    grossman1_T3 <- phyloseq2core(subset_samples(grossman1_physeq_transformed_Noto, Time=='T3'), 'Notothylas', 'Grossman1', 'T3')
+    grossman1_T4 <- phyloseq2core(subset_samples(grossman1_physeq_transformed_Noto, Time=='T4'), 'Notothylas', 'Grossman1', 'T4')
+    grossman2_T1 <- phyloseq2core(subset_samples(grossman2_physeq_transformed_Noto, Time=='T1'), 'Notothylas', 'Grossman2', 'T1')
+    grossman2_T2 <- phyloseq2core(subset_samples(grossman2_physeq_transformed_Noto, Time=='T2'), 'Notothylas', 'Grossman2', 'T2')
+    grossman2_T3 <- phyloseq2core(subset_samples(grossman2_physeq_transformed_Noto, Time=='T3'), 'Notothylas', 'Grossman2', 'T3')
+    
+    grossman1_T1_soil <- phyloseq2core(subset_samples(grossman1_physeq_transformed_soil, Time=='T1'), 'soil', 'Grossman1', 'T1')
+    grossman1_T2_soil <- phyloseq2core(subset_samples(grossman1_physeq_transformed_soil, Time=='T2'), 'soil', 'Grossman1', 'T2')
+    grossman1_T3_soil <- phyloseq2core(subset_samples(grossman1_physeq_transformed_soil, Time=='T3'), 'soil', 'Grossman1', 'T3')
+    grossman1_T4_soil <- phyloseq2core(subset_samples(grossman1_physeq_transformed_soil, Time=='T4'), 'soil', 'Grossman1', 'T4')
+    grossman2_T1_soil <- phyloseq2core(subset_samples(grossman2_physeq_transformed_soil, Time=='T1'), 'soil', 'Grossman2', 'T1')
+    grossman2_T2_soil <- phyloseq2core(subset_samples(grossman2_physeq_transformed_soil, Time=='T2'), 'soil', 'Grossman2', 'T2')
+    grossman2_T3_soil <- phyloseq2core(subset_samples(grossman2_physeq_transformed_soil, Time=='T3'), 'soil', 'Grossman2', 'T3')
+    
+    grossman_Tall <- bind_rows(grossman1_T1, grossman1_T2, grossman1_T3, grossman1_T4, grossman2_T1, grossman2_T3)
+    grossman_core_stickgraph <- ggplot(data=grossman_Tall) + geom_point(aes(y = reorder(ASV, desc(ASV)), x=abundance, shape=Time, color=Type)) +
+      xlab('Relative abundance') + ylab('') + scale_color_manual(values=c("steelblue","gold2","darkseagreen"))
+    #grossman_heatmap <- ggplot(data=grossman_Tall, aes(x=ASV, y=replicate, fill=value)) + geom_tile()
+    tbl2hmap(tbl.long = grossman_Tall, rowVar = 'ASV', colVar = 'replicate', valueVar = 'value')$mat
+    grossman_heatmap <- as.ggplot( pheatmap(tbl2hmap(tbl.long = grossman_Tall, rowVar = 'ASV', colVar = 'replicate', valueVar = 'value')$mat ,cluster_rows=FALSE, cluster_cols=FALSE) )
+    
+    
 # Potato Hill ------------------------------------------------------------
   ## Subset PotatoHill samples
     potato_physeq <- subset_samples(time_series_physeq, Quadrat=="Potato1"|Quadrat=="Potato2"|Quadrat=="Potato3")
@@ -636,6 +800,9 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
     potato_pcoa_all_plantsonly <- plot_ordination(potato_physeq_plantsonly_transformed, potato_physeq_plantsonly_transformed.ord, color="Quadrat") +
       geom_point(size=4, aes(color=Quadrat)) + geom_point(shape = 1,size = 4,colour = "black") + scale_color_manual(values=c("steelblue","gold2","darkseagreen")) +
       ggtitle("Plants unweighted unifrac")
+    potato_pcoa_all_plantsonly <- plot_ordination(potato_physeq_plantsonly_transformed, potato_physeq_plantsonly_transformed.ord, color="Type") +
+      geom_point(size=4, aes(color=Type)) + geom_point(shape = 1,size = 4,colour = "black") + scale_color_manual(values=c("steelblue","gold2","darkseagreen")) +
+      ggtitle("Plants unweighted unifrac")
   ## Soil samples, unweighted unifrac
     potato_physeq_soil_transformed.ord <- ordinate(potato_physeq_soil_transformed, "PCoA", "unifrac")
     potato_pcoa_all_soil <- plot_ordination(potato_physeq_soil_transformed, potato_physeq_soil_transformed.ord, color="Quadrat") +
@@ -645,6 +812,9 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
     potato_physeq_plantsonly_transformed_w.ord <- ordinate(potato_physeq_plantsonly_transformed, "PCoA", "wunifrac")
     potato_pcoa_all_plantsonly_w <- plot_ordination(potato_physeq_plantsonly_transformed, potato_physeq_plantsonly_transformed_w.ord, color="Quadrat") +
       geom_point(size=4, aes(color=Quadrat)) + geom_point(shape = 1,size = 4,colour = "black") + scale_color_manual(values=c("steelblue","gold2","darkseagreen")) +
+      ggtitle("Plants weighted unifrac")
+    potato_pcoa_all_plantsonly_w <- plot_ordination(potato_physeq_plantsonly_transformed, potato_physeq_plantsonly_transformed_w.ord, color="Type") +
+      geom_point(size=4, aes(color=Type)) + geom_point(shape = 1,size = 4,colour = "black") + scale_color_manual(values=c("steelblue","gold2","darkseagreen")) +
       ggtitle("Plants weighted unifrac")
   ## Soil samples, weighted unifrac
     potato_physeq_soil_transformed_w.ord <- ordinate(potato_physeq_soil_transformed, "PCoA", "wunifrac", )
@@ -831,7 +1001,20 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
     
     (potato3_pcoa_T1 | potato3_pcoa_T2 | potato3_pcoa_T3 | potato3_pcoa_T4) + plot_layout(guides = 'collect')
     (potato3_pcoa_Antho | potato3_pcoa_Noto | potato3_pcoa_Phaeo | potato3_pcoa_soil)+ plot_layout(guides = 'collect')
-  
+    
+    ### core abundance 
+      potato3_Tall <- NULL
+      for (time in c('T1','T2','T3','T4')) {
+        table1 <- phyloseq2core(subset_samples(potato3_physeq_transformed_Antho, Time==time), 'Anthoceros', 'Potato3', time)
+        table2 <- phyloseq2core(subset_samples(potato3_physeq_transformed_Noto, Time==time), 'Notothylas', 'Potato3', time)
+        table3 <- phyloseq2core(subset_samples(potato3_physeq_transformed_Phaeo, Time==time), 'Phaeoceros', 'Potato3', time)
+        potato3_Tall <- bind_rows(potato3_Tall, table1, table2, table3)
+      }
+      #potato3_core_heatmap <- as.ggplot(pheatmap(potato3_Tall,cluster_rows=FALSE, cluster_cols=FALSE, fontsize=8))
+      potato3_core_stickgraph <- ggplot(data=potato3_Tall) + geom_point(aes(y = reorder(ASV, desc(ASV)), x=abundance, shape=Time, color=Type)) +
+        xlab('Relative abundance') + ylab('') + scale_color_manual(values=c("steelblue","gold2","darkseagreen"))
+      potato3_core_heatmap <- as.ggplot( pheatmap(tbl2hmap(tbl.long = potato3_Tall, rowVar = 'ASV', colVar = 'replicate', valueVar = 'value')$mat ,cluster_rows=FALSE, cluster_cols=FALSE) )
+      
   ## ^Quadrat 1 ====
     ### transform counts into proportion
       potato1_physeq_transformed <- subset_samples(potato_physeq_transformed, Quadrat=="Potato1")
@@ -965,6 +1148,22 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
       
     (potato1_pcoa_T1 | potato1_pcoa_T2 | potato1_pcoa_T3 | potato1_pcoa_T4) + plot_layout(guides = 'collect')
     (potato1_pcoa_Antho | potato1_pcoa_Noto | potato1_pcoa_Phaeo | potato1_pcoa_soil)+ plot_layout(guides = 'collect')
+     
+    ### core abundance 
+      potato1_Tall <- NULL
+      for (time in c('T1','T2','T3','T4')) {
+        table1 <- phyloseq2core(subset_samples(potato1_physeq_transformed_Antho, Time==time), 'Anthoceros', 'Potato1', time)
+        if (time != 'T4'){
+        table2 <- phyloseq2core(subset_samples(potato1_physeq_transformed_Noto, Time==time), 'Notothylas', 'Potato1', time)
+        }
+        else {table2 <- NULL}
+        table3 <- phyloseq2core(subset_samples(potato1_physeq_transformed_Phaeo, Time==time), 'Phaeoceros', 'Potato1', time)
+        potato1_Tall <- bind_rows(potato1_Tall, table1, table2, table3)
+      }
+      #potato1_core_heatmap <- as.ggplot(pheatmap(potato1_Tall,cluster_rows=FALSE, cluster_cols=FALSE, fontsize=8))
+      potato1_core_stickgraph <- ggplot(data=potato1_Tall) + geom_point(aes(y = reorder(ASV, desc(ASV)), x=abundance, shape=Time, color=Type)) +
+        xlab('Relative abundance') + ylab('') + scale_color_manual(values=c("steelblue","gold2","darkseagreen"))
+      potato1_core_heatmap <- as.ggplot( pheatmap(tbl2hmap(tbl.long = potato1_Tall, rowVar = 'ASV', colVar = 'replicate', valueVar = 'value')$mat ,cluster_rows=FALSE, cluster_cols=FALSE) )
       
   ## ^Quadrat 2 ====
     ### transform counts into proportion
@@ -1104,7 +1303,20 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
     
     (potato2_pcoa_T1 | potato2_pcoa_T2 | potato2_pcoa_T3 | potato2_pcoa_T4) + plot_layout(guides = 'collect')
     (potato2_pcoa_Antho | potato2_pcoa_Noto | potato2_pcoa_Phaeo | potato2_pcoa_soil)+ plot_layout(guides = 'collect')
-
+    
+    ### core abundance 
+      potato2_Tall <- NULL
+      for (time in c('T1','T2','T3','T4')) {
+        table1 <- phyloseq2core(subset_samples(potato2_physeq_transformed_Antho, Time==time), 'Anthoceros', 'Potato2', time)
+        table2 <- phyloseq2core(subset_samples(potato2_physeq_transformed_Noto, Time==time), 'Notothylas', 'Potato2', time)
+        table3 <- phyloseq2core(subset_samples(potato2_physeq_transformed_Phaeo, Time==time), 'Phaeoceros', 'Potato2', time)
+        potato2_Tall <- bind_rows(potato2_Tall, table1, table2, table3)
+      }
+      #potato2_core_heatmap <- as.ggplot(pheatmap(potato2_Tall,cluster_rows=FALSE, cluster_cols=FALSE, fontsize=8))
+      potato2_core_stickgraph <- ggplot(data=potato2_Tall) + geom_point(aes(y = reorder(ASV, desc(ASV)), x=abundance, shape=Time, color=Type)) +
+        xlab('Relative abundance') + ylab('') + scale_color_manual(values=c("steelblue","gold2","darkseagreen"))
+      potato2_core_heatmap <- as.ggplot( pheatmap(tbl2hmap(tbl.long = potato2_Tall, rowVar = 'ASV', colVar = 'replicate', valueVar = 'value')$mat ,cluster_rows=FALSE, cluster_cols=FALSE) )
+      
 # Save Plots --------------------------------------------------------------
   potato_pcoa_all_soil + potato_pcoa_all_plantsonly + plot_layout(guides = 'collect')
   ggsave("potato_pcoa_plants_soils.pdf", device = "pdf", width = 18, height = 12)
@@ -1140,6 +1352,10 @@ setwd("/Users/fay-weili/Box/hornwort_amplicon/dada2/")
   ggsave("potato_grossman_pcoa_plants_soils_byQ_byTime.pdf", device = "pdf", width = 18, height = 17)
   ggsave("potato_grossman_pcoa_plants_soils_byQ_byTime.svg", device = "svg", width = 18, height = 17)
   
+  ((grossman_core_stickgraph / guide_area() ) | potato1_core_stickgraph | potato2_core_stickgraph | potato3_core_stickgraph) + plot_layout(guides = 'collect')
+  core_Tall <- bind_rows(grossman_Tall, potato1_Tall, potato2_Tall, potato3_Tall)
+  core_Tall_heatmap <- as.ggplot( pheatmap(tbl2hmap(tbl.long = core_Tall, rowVar = 'ASV', colVar = 'replicate', valueVar = 'value')$mat ,cluster_rows=FALSE, cluster_cols=FALSE) )
+  ggsave("core_Tall_heatmap.pdf", device = "pdf", width = 4, height = 18)
   
 # DESeq2 on Q3 ------------------------------------------------------------
   fdr <- 0.05
